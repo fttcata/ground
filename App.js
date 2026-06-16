@@ -3,6 +3,7 @@ import * as SQLite from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -272,6 +273,8 @@ export default function App() {
   const [journalText, setJournalText] = useState('');
   const [savedMessage, setSavedMessage] = useState('');
   const [entries, setEntries] = useState([]);
+  const [showStreakPopup, setShowStreakPopup] = useState(false);
+  const [streakIncremented, setStreakIncremented] = useState(false);
 
   const intervalHours = intervalHoursForCount(reminderCount);
   const tabConfig = {
@@ -298,12 +301,17 @@ export default function App() {
           const loginDays = Array.from(
             new Set([...(settings.lastOpenedDate ? [settings.lastOpenedDate] : []), currentDayKey])
           ).sort();
+          const previousStreakValue = toInteger(settings.streakCount, 1);
           const streakValue =
             settings.lastOpenedDate && settings.lastOpenedDate !== currentDayKey
               ? settings.lastOpenedDate === yesterdayKey(currentDate)
-                ? toInteger(settings.streakCount, 1) + 1
+                ? previousStreakValue + 1
                 : 1
-              : toInteger(settings.streakCount, 1);
+              : previousStreakValue;
+          const streakJustIncremented =
+            settings.lastOpenedDate &&
+            settings.lastOpenedDate !== currentDayKey &&
+            settings.lastOpenedDate === yesterdayKey(currentDate);
 
           const existingEntry = sanitizedHistory.find((entry) => entry.slotKey === currentSlot.slotKey);
           const sentence =
@@ -341,6 +349,10 @@ export default function App() {
             setCurrentSentence(sentence);
             setNextRefreshAt(currentSlot.nextRefreshAt);
             setEntries(state.entries.slice(0, 20));
+            if (streakJustIncremented) {
+              setShowStreakPopup(true);
+              setStreakIncremented(true);
+            }
           }
 
           return;
@@ -399,6 +411,11 @@ export default function App() {
               : 1
             : toInteger(settings.streakCount, 1);
 
+        const streakJustIncremented =
+          settings.lastOpenedDate &&
+          settings.lastOpenedDate !== currentDayKey &&
+          settings.lastOpenedDate === yesterdayKey(currentDate);
+
         await database.runAsync(
           'UPDATE settings SET value = ? WHERE key = ?',
           currentDayKey,
@@ -442,6 +459,10 @@ export default function App() {
           setCurrentSentence(sentence);
           setNextRefreshAt(currentSlot.nextRefreshAt);
           setEntries(journalRows);
+          if (streakJustIncremented) {
+            setShowStreakPopup(true);
+            setStreakIncremented(true);
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -657,7 +678,7 @@ export default function App() {
         <View style={styles.blobBottom} />
       </View>
 
-      <View style={styles.cornerNav}>
+      <View style={styles.cornerNav} pointerEvents="box-none">
         <View style={styles.cornerTopRow}>
           <GroundPressable
             label="Open home"
@@ -921,6 +942,29 @@ export default function App() {
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showStreakPopup}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStreakPopup(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.streakModal}>
+            <Text style={styles.streakFireEmoji}>🔥</Text>
+            <Text style={styles.streakPopupTitle}>{streakCount} Day Streak!</Text>
+            <Text style={styles.streakPopupText}>Keep it going!</Text>
+            <GroundPressable
+              label="Close streak celebration"
+              onPress={() => setShowStreakPopup(false)}
+              style={styles.modalButton}
+              contentStyle={styles.modalButtonContent}
+            >
+              <Text style={styles.modalButtonText}>Nice!</Text>
+            </GroundPressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1414,5 +1458,52 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  streakModal: {
+    backgroundColor: stylesVars.surface,
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    gap: 16,
+    maxWidth: 300,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 20,
+    elevation: 5,
+  },
+  streakFireEmoji: {
+    fontSize: 64,
+  },
+  streakPopupTitle: {
+    color: stylesVars.text,
+    fontSize: 28,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  streakPopupText: {
+    color: stylesVars.muted,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  modalButton: {
+    backgroundColor: stylesVars.accent,
+    borderRadius: 18,
+    marginTop: 8,
+  },
+  modalButtonContent: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  modalButtonText: {
+    color: '#FFF7EB',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
